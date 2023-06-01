@@ -16,6 +16,14 @@ vote_counts AS (
     FROM sage_votes
     GROUP BY topic_id
 ),
+flagged_posts AS (
+    SELECT p.topic_id
+    FROM post_actions AS pa
+    JOIN posts AS p ON pa.post_id = p.id
+    JOIN reviewables AS r ON r.target_id = p.id AND r.target_type = 'Post'
+    JOIN post_action_types AS pat ON pa.post_action_type_id = pat.id
+    WHERE pat.is_flag = true AND r.status = 1
+),
 ranked_topics AS (
     SELECT 
         topics.title AS "Proposal Title", 
@@ -23,6 +31,7 @@ ranked_topics AS (
         topics.excerpt AS "Topic Description",
         users.username AS "Topic Owner",
         vote_counts."Number of Votes",
+        categories.name AS "Category",
         ROW_NUMBER() OVER (PARTITION BY topics.user_id ORDER BY vote_counts."Number of Votes" DESC) as rn
     FROM 
         topics 
@@ -30,8 +39,12 @@ ranked_topics AS (
         vote_counts ON topics.id = vote_counts.topic_id
     JOIN
         users ON topics.user_id = users.id
+    JOIN
+        categories ON topics.category_id = categories.id
     WHERE
         topics.user_id IN (SELECT user_id FROM sage_users)
+        AND topics.id NOT IN (SELECT topic_id FROM flagged_posts)
+        AND categories.name = 'New Requests'
 )
 
 SELECT 
@@ -39,6 +52,7 @@ SELECT
     "Link",
     "Topic Description",
     "Topic Owner",
+    "Category",
     "Number of Votes"
 FROM
     ranked_topics
